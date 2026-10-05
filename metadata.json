@@ -1,0 +1,6 @@
+{
+  "name": "KanjiViet - Tra cứu Hán Việt & Phân tích Kanji",
+  "description": "Công cụ phân tích cấu trúc Hán tự, tra cứu tức thì âm Hán Việt và nghĩa cốt lõi của từng ký tự Kanji tiếng Nhật cho sinh viên và người học JLPT.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
