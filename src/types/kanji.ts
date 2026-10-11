@@ -94,9 +94,12 @@ export interface ThemeSettings {
 
 export interface UserAccount {
   id: string;
+  email?: string;
   username: string;
   displayName: string;
   avatar: string;
+  photoUrl?: string;
+  isGoogleUser?: boolean;
   role?: string;
   themeSettings: ThemeSettings;
   createdAt: number;

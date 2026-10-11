@@ -1,99 +1,138 @@
 import { SavedHandwriting, ThemeSettings, UserAccount } from '../types/kanji';
 
 const STORAGE_KEYS = {
-  USERS_LIST: 'kanjiviet_users_list_v2',
-  ACTIVE_USER_ID: 'kanjiviet_active_user_id_v2',
+  CURRENT_USER: 'kanjiviet_current_google_user_v3',
+  OLD_USERS_LIST: 'kanjiviet_users_list_v2',
+  OLD_ACTIVE_USER: 'kanjiviet_active_user_id_v2',
 };
 
-const DEFAULT_SETTINGS: ThemeSettings = {
+// Cleanup old mock data on boot
+try {
+  localStorage.removeItem(STORAGE_KEYS.OLD_USERS_LIST);
+  localStorage.removeItem(STORAGE_KEYS.OLD_ACTIVE_USER);
+} catch {
+  // ignore
+}
+
+export const DEFAULT_SETTINGS: ThemeSettings = {
   themeId: 'sakura',
   fontSize: 'normal',
   kanjiFont: 'serif',
 };
 
-const DEFAULT_ACCOUNTS: UserAccount[] = [
-  {
-    id: 'user_sakura',
-    username: 'sinhvien_a',
-    displayName: 'Thanh Trúc (Nhật Bản Học)',
-    avatar: '🌸',
-    role: 'Sinh viên Chuyên ngành Dịch thuật',
-    themeSettings: {
-      themeId: 'sakura',
-      fontSize: 'normal',
-      kanjiFont: 'serif',
-    },
-    createdAt: Date.now() - 86400000 * 3,
-  },
-  {
-    id: 'user_jlpt_n2',
-    username: 'jlpt_master',
-    displayName: 'Quốc Huy (Ôn thi JLPT N2)',
-    avatar: '🍵',
-    role: 'Luyện thi N3 → N1',
-    themeSettings: {
-      themeId: 'matcha',
-      fontSize: 'comfortable',
-      kanjiFont: 'serif',
-    },
-    createdAt: Date.now() - 86400000 * 2,
-  },
-  {
-    id: 'user_wisteria',
-    username: 'lan_anh',
-    displayName: 'Lan Anh (Đọc báo Nihon)',
-    avatar: '🪻',
-    role: 'Dịch thuật Kinh tế - Xã hội',
-    themeSettings: {
-      themeId: 'hydrangea',
-      fontSize: 'normal',
-      kanjiFont: 'serif',
-    },
-    createdAt: Date.now() - 86400000 * 1,
-  },
-];
+export const GUEST_ACCOUNT: UserAccount = {
+  id: 'guest',
+  username: 'khach',
+  displayName: 'Khách (Chưa đăng nhập)',
+  avatar: '👤',
+  isGoogleUser: false,
+  role: 'Khách vãng lai',
+  themeSettings: DEFAULT_SETTINGS,
+  createdAt: 0,
+};
 
-export function getAllAccounts(): UserAccount[] {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEYS.USERS_LIST);
-    if (!raw) {
-      localStorage.setItem(STORAGE_KEYS.USERS_LIST, JSON.stringify(DEFAULT_ACCOUNTS));
-      return DEFAULT_ACCOUNTS;
-    }
-    const accounts = JSON.parse(raw);
-    return accounts.length > 0 ? accounts : DEFAULT_ACCOUNTS;
-  } catch {
-    return DEFAULT_ACCOUNTS;
-  }
-}
-
+/**
+ * Returns the currently authenticated Google account, or guest if not logged in.
+ */
 export function getActiveAccount(): UserAccount {
-  const accounts = getAllAccounts();
   try {
-    const activeId = localStorage.getItem(STORAGE_KEYS.ACTIVE_USER_ID);
-    const matched = accounts.find((a) => a.id === activeId);
-    if (matched) return matched;
-  } catch {
-    // fallback
-  }
-  // Default to first account
-  const defaultAcc = accounts[0];
-  try {
-    localStorage.setItem(STORAGE_KEYS.ACTIVE_USER_ID, defaultAcc.id);
+    const raw = localStorage.getItem(STORAGE_KEYS.CURRENT_USER);
+    if (raw) {
+      const parsed: UserAccount = JSON.parse(raw);
+      if (parsed && parsed.id && parsed.isGoogleUser) {
+        return parsed;
+      }
+    }
   } catch {
     // ignore
   }
-  return defaultAcc;
+  return GUEST_ACCOUNT;
+}
+
+/**
+ * Login with a user's own Google account.
+ */
+export function loginWithGoogleAccount(data: {
+  email: string;
+  displayName: string;
+  photoUrl?: string;
+  role?: string;
+}): UserAccount {
+  const cleanEmail = data.email.trim().toLowerCase();
+  const username = cleanEmail.split('@')[0];
+  const id = `google_${cleanEmail.replace(/[^a-z0-9]/g, '_')}`;
+
+  const currentTheme = getActiveAccount().themeSettings || DEFAULT_SETTINGS;
+
+  const user: UserAccount = {
+    id,
+    email: cleanEmail,
+    username,
+    displayName: data.displayName.trim() || username,
+    avatar: '🌐',
+    photoUrl: data.photoUrl || '',
+    isGoogleUser: true,
+    role: data.role || 'Tài khoản Google',
+    themeSettings: currentTheme,
+    createdAt: Date.now(),
+  };
+
+  try {
+    localStorage.setItem(STORAGE_KEYS.CURRENT_USER, JSON.stringify(user));
+  } catch (err) {
+    console.error('Failed to save Google account', err);
+  }
+  return user;
+}
+
+/**
+ * Logout the user, restoring guest state.
+ */
+export function logoutAccount(): UserAccount {
+  try {
+    localStorage.removeItem(STORAGE_KEYS.CURRENT_USER);
+  } catch (err) {
+    console.error('Failed to logout', err);
+  }
+  return GUEST_ACCOUNT;
+}
+
+/**
+ * Update theme or font settings for the active user.
+ */
+export function updateAccountSettings(
+  userId: string,
+  settings: Partial<ThemeSettings>
+): UserAccount {
+  const current = getActiveAccount();
+  const updated: UserAccount = {
+    ...current,
+    themeSettings: {
+      ...current.themeSettings,
+      ...settings,
+    },
+  };
+
+  try {
+    if (updated.isGoogleUser) {
+      localStorage.setItem(STORAGE_KEYS.CURRENT_USER, JSON.stringify(updated));
+    }
+  } catch {
+    // ignore
+  }
+  return updated;
+}
+
+/**
+ * Backward compatibility helpers
+ */
+export function getAllAccounts(): UserAccount[] {
+  const active = getActiveAccount();
+  return active.isGoogleUser ? [active] : [];
 }
 
 export function setActiveAccount(userId: string): UserAccount {
-  const accounts = getAllAccounts();
-  const found = accounts.find((a) => a.id === userId);
-  if (found) {
-    localStorage.setItem(STORAGE_KEYS.ACTIVE_USER_ID, found.id);
-    return found;
-  }
-  return accounts[0];
+  return getActiveAccount();
 }
 
 export function createAccount(data: {
@@ -103,53 +142,15 @@ export function createAccount(data: {
   role?: string;
   themeId?: ThemeSettings['themeId'];
 }): UserAccount {
-  const accounts = getAllAccounts();
-  const id = `user_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`;
-  const newAccount: UserAccount = {
-    id,
-    username: data.username.trim().toLowerCase(),
-    displayName: data.displayName.trim() || data.username.trim(),
-    avatar: data.avatar || '🌸',
-    role: data.role || 'Người học Kanji',
-    themeSettings: {
-      ...DEFAULT_SETTINGS,
-      themeId: data.themeId || 'sakura',
-    },
-    createdAt: Date.now(),
-  };
-
-  const updated = [...accounts, newAccount];
-  localStorage.setItem(STORAGE_KEYS.USERS_LIST, JSON.stringify(updated));
-  localStorage.setItem(STORAGE_KEYS.ACTIVE_USER_ID, newAccount.id);
-  return newAccount;
-}
-
-export function updateAccountSettings(
-  userId: string,
-  settings: Partial<ThemeSettings>
-): UserAccount {
-  const accounts = getAllAccounts();
-  const index = accounts.findIndex((a) => a.id === userId);
-  if (index >= 0) {
-    accounts[index].themeSettings = {
-      ...accounts[index].themeSettings,
-      ...settings,
-    };
-    localStorage.setItem(STORAGE_KEYS.USERS_LIST, JSON.stringify(accounts));
-    return accounts[index];
-  }
-  return getActiveAccount();
+  return loginWithGoogleAccount({
+    email: `${data.username}@gmail.com`,
+    displayName: data.displayName,
+    role: data.role,
+  });
 }
 
 export function deleteAccount(userId: string): UserAccount {
-  const accounts = getAllAccounts();
-  if (accounts.length <= 1) {
-    // Cannot delete the only account
-    return accounts[0];
-  }
-  const updated = accounts.filter((a) => a.id !== userId);
-  localStorage.setItem(STORAGE_KEYS.USERS_LIST, JSON.stringify(updated));
-  return setActiveAccount(updated[0].id);
+  return logoutAccount();
 }
 
 // User-scoped handwriting saves

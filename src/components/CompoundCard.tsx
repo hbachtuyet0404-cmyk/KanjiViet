@@ -12,7 +12,6 @@ interface CompoundCardProps {
   theme: ThemeConfig;
   fontSize: FontSizeSetting;
   kanjiFont: KanjiFontStyle;
-  onPracticeHandwriting?: (kanji: string) => void;
 }
 
 export const CompoundCard: React.FC<CompoundCardProps> = ({
@@ -23,7 +22,6 @@ export const CompoundCard: React.FC<CompoundCardProps> = ({
   theme,
   fontSize,
   kanjiFont,
-  onPracticeHandwriting,
 }) => {
   const [copiedType, setCopiedType] = useState<'hv' | 'full' | null>(null);
   const [isPlayingAudio, setIsPlayingAudio] = useState(false);
@@ -95,16 +93,6 @@ export const CompoundCard: React.FC<CompoundCardProps> = ({
 
         {/* Quick action buttons */}
         <div className="flex items-center gap-2">
-          {onPracticeHandwriting && (
-            <button
-              onClick={() => onPracticeHandwriting(kanjiList[0]?.kanji || word[0] || '漢')}
-              title="Luyện viết tay chữ này trên bảng vẽ"
-              className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1.5 ${theme.badgeBg} ${theme.badgeText} border ${theme.badgeBorder}`}
-            >
-              <PenTool className="w-3.5 h-3.5" />
-              <span>Tập viết tay</span>
-            </button>
-          )}
 
           <button
             onClick={onToggleFavorite}

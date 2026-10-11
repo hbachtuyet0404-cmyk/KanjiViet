@@ -9,7 +9,6 @@ interface KanjiGridProps {
   onSelectWord: (word: string) => void;
   theme: ThemeConfig;
   kanjiFont: KanjiFontStyle;
-  onPracticeHandwriting?: (kanji: string) => void;
 }
 
 export const KanjiGrid: React.FC<KanjiGridProps> = ({
@@ -17,7 +16,6 @@ export const KanjiGrid: React.FC<KanjiGridProps> = ({
   onSelectWord,
   theme,
   kanjiFont,
-  onPracticeHandwriting,
 }) => {
   if (kanjiList.length === 0) {
     return null;
@@ -87,21 +85,11 @@ export const KanjiGrid: React.FC<KanjiGridProps> = ({
                   </div>
                 </div>
 
-                {/* Top Right: Practice button */}
+                {/* Top Right: Index */}
                 <div className="flex flex-col items-end gap-1.5">
                   <span className="text-[11px] font-mono-numbers text-stone-400 bg-stone-100 px-2 py-0.5 rounded">
                     #{idx + 1}/{kanjiList.length}
                   </span>
-                  {onPracticeHandwriting && (
-                    <button
-                      onClick={() => onPracticeHandwriting(item.kanji)}
-                      title={`Mở bảng vẽ tập viết chữ ${item.kanji}`}
-                      className={`text-xs font-semibold px-2 py-1 rounded-md ${theme.badgeBg} ${theme.badgeText} hover:opacity-80 transition-opacity flex items-center gap-1 border ${theme.badgeBorder}`}
-                    >
-                      <PenTool className="w-3 h-3" />
-                      <span>Tập viết</span>
-                    </button>
-                  )}
                 </div>
               </div>
 

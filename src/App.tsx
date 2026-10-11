@@ -12,7 +12,6 @@ import { SearchHistoryDrawer } from './components/SearchHistoryDrawer';
 import { FavoritesView } from './components/FavoritesView';
 import { DataExplorationView } from './components/DataExplorationView';
 import { QuizMode } from './components/QuizMode';
-import { HandwritingPad } from './components/HandwritingPad';
 import { HandwritingSearchModal } from './components/HandwritingSearchModal';
 import { ExternalSearchCard } from './components/ExternalSearchCard';
 import { ThemeAccountModal } from './components/ThemeAccountModal';
@@ -46,20 +45,18 @@ export default function App() {
     return THEME_CONFIGS[tId] || THEME_CONFIGS.sakura;
   }, [activeUser.themeSettings?.themeId]);
 
-  const [activeTab, setActiveTab] = useState<'search' | 'handwriting' | 'favorites' | 'data' | 'quiz'>('search');
+  const [activeTab, setActiveTab] = useState<'search' | 'favorites' | 'data' | 'quiz'>('search');
   const [query, setQuery] = useState('経済学');
   const [searchResult, setSearchResult] = useState<SearchResult>(() => parseKanjiQuery('経済学', activeUser.id));
   const [history, setHistory] = useState<SearchHistoryEntry[]>([]);
   const [favorites, setFavorites] = useState<FavoriteEntry[]>([]);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [isThemeModalOpen, setIsThemeModalOpen] = useState(false);
+  const [themeModalTab, setThemeModalTab] = useState<'theme' | 'google'>('theme');
   const [isHandwritingSearchOpen, setIsHandwritingSearchOpen] = useState(false);
   const [isExternalSearchActive, setIsExternalSearchActive] = useState(false);
   const [sharedExternalResult, setSharedExternalResult] = useState<ExternalSearchResult | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
-
-  // Character targeted for handwriting practice
-  const [practiceChar, setPracticeChar] = useState<string>('経');
 
   // Load account-scoped history and favorites whenever activeUser changes
   useEffect(() => {
@@ -78,10 +75,6 @@ export default function App() {
   useEffect(() => {
     const result = parseKanjiQuery(query, activeUser.id);
     setSearchResult(result);
-
-    if (result.kanjiList.length > 0) {
-      setPracticeChar(result.kanjiList[0].kanji);
-    }
 
     if (query.trim() && result.kanjiList.length > 0) {
       const timer = setTimeout(() => {
@@ -167,13 +160,6 @@ export default function App() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const handlePracticeHandwriting = (kanjiChar: string) => {
-    setPracticeChar(kanjiChar);
-    setActiveTab('handwriting');
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-    showToast(`Đã nạp chữ [${kanjiChar}] lên bảng vẽ để luyện viết!`);
-  };
-
   const handleRandomWord = () => {
     const all = getAllCompounds(activeUser.id);
     if (all.length > 0) {
@@ -195,7 +181,7 @@ export default function App() {
     setHistory(updated);
   };
 
-  const currentFirstKanjiDetail = searchResult.kanjiList.find((k) => k.kanji === practiceChar) || searchResult.kanjiList[0];
+  const currentFirstKanjiDetail = searchResult.kanjiList[0];
 
   return (
     <div className={`min-h-screen ${theme.bgCanvas} text-stone-900 flex flex-col font-sans-ui transition-colors duration-300 selection:bg-rose-100 selection:text-rose-900`}>
@@ -215,7 +201,10 @@ export default function App() {
         onRandomWord={handleRandomWord}
         activeUser={activeUser}
         theme={theme}
-        onOpenThemeAccountModal={() => setIsThemeModalOpen(true)}
+        onOpenThemeAccountModal={(tab) => {
+          setThemeModalTab(tab || 'theme');
+          setIsThemeModalOpen(true);
+        }}
       />
 
       {/* Main Content Body */}
@@ -248,7 +237,6 @@ export default function App() {
                 theme={theme}
                 userId={activeUser.id}
                 onSelectWord={handleSelectWord}
-                onPracticeHandwriting={handlePracticeHandwriting}
                 onToast={showToast}
                 onAddedToLocalData={() => {
                   setSearchResult(parseKanjiQuery(query, activeUser.id));
@@ -268,7 +256,6 @@ export default function App() {
                   theme={theme}
                   fontSize={activeUser.themeSettings.fontSize}
                   kanjiFont={activeUser.themeSettings.kanjiFont}
-                  onPracticeHandwriting={handlePracticeHandwriting}
                 />
 
                 {/* Banner: Prompt to explore external new words if desired */}
@@ -294,7 +281,6 @@ export default function App() {
                   onSelectWord={handleSelectWord}
                   theme={theme}
                   kanjiFont={activeUser.themeSettings.kanjiFont}
-                  onPracticeHandwriting={handlePracticeHandwriting}
                 />
 
                 {/* Related Compound Words Section */}
@@ -374,20 +360,7 @@ export default function App() {
           </div>
         )}
 
-        {/* TAB 2: HANDWRITING DRAWING CANVAS */}
-        {activeTab === 'handwriting' && (
-          <HandwritingPad
-            currentKanji={practiceChar}
-            currentHanViet={currentFirstKanjiDetail?.hanViet || ''}
-            theme={theme}
-            user={activeUser}
-            onSelectKanji={(k) => setPracticeChar(k)}
-            onSearchKanji={handleSelectWord}
-            onToast={showToast}
-          />
-        )}
-
-        {/* TAB 3: FAVORITES / SỔ TAY */}
+        {/* TAB 2: FAVORITES / SỔ TAY */}
         {activeTab === 'favorites' && (
           <FavoritesView
             favorites={favorites}
@@ -395,7 +368,6 @@ export default function App() {
             onUpdateNote={handleUpdateNote}
             onSelectWord={handleSelectWord}
             onAddFavorite={handleAddCustomFavorite}
-            onPracticeHandwriting={handlePracticeHandwriting}
             theme={theme}
             user={activeUser}
             onToast={showToast}
@@ -439,7 +411,7 @@ export default function App() {
         onClearAll={handleClearHistory}
       />
 
-      {/* Theme & Multi-Account Modal */}
+      {/* Theme & Google Account Modal */}
       <ThemeAccountModal
         isOpen={isThemeModalOpen}
         onClose={() => setIsThemeModalOpen(false)}
@@ -448,6 +420,7 @@ export default function App() {
           setActiveUser(newUser);
         }}
         onToast={showToast}
+        initialTab={themeModalTab}
       />
 
       {/* Handwriting Search Modal */}
@@ -478,13 +451,16 @@ export default function App() {
       <footer className={`mt-auto border-t ${theme.borderSubtle} bg-white/70 py-6 text-xs text-stone-500`}>
         <div className="max-w-6xl mx-auto px-4 sm:px-6 flex flex-col sm:flex-row items-center justify-between gap-3 text-center sm:text-left">
           <div className="flex items-center gap-2">
-            <span>{activeUser.avatar}</span>
+            <span>{activeUser.isGoogleUser ? '🌐' : '👤'}</span>
             <span className="font-semibold text-stone-800">KanjiViet Pastel</span>
-            <span>— Tài khoản: {activeUser.displayName}</span>
+            <span>— {activeUser.isGoogleUser ? `Google: ${activeUser.displayName}` : 'Chưa đăng nhập'}</span>
           </div>
           <div className="flex items-center gap-3 text-stone-400">
             <button
-              onClick={() => setIsThemeModalOpen(true)}
+              onClick={() => {
+                setThemeModalTab('theme');
+                setIsThemeModalOpen(true);
+              }}
               className="hover:text-stone-700 flex items-center gap-1 font-medium transition-colors"
             >
               <Palette className="w-3.5 h-3.5" />

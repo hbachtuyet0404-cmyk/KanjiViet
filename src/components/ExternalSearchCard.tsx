@@ -29,7 +29,6 @@ interface ExternalSearchCardProps {
   theme: ThemeConfig;
   userId: string;
   onSelectWord: (word: string) => void;
-  onPracticeHandwriting: (kanjiChar: string) => void;
   onToast: (msg: string) => void;
   onAddedToLocalData?: () => void;
 }
@@ -52,7 +51,6 @@ export const ExternalSearchCard: React.FC<ExternalSearchCardProps> = ({
   theme,
   userId,
   onSelectWord,
-  onPracticeHandwriting,
   onToast,
   onAddedToLocalData,
 }) => {
@@ -422,11 +420,11 @@ ${result.originNotes ? `\nNguồn gốc & Chiết tự: ${result.originNotes}` :
                       </div>
 
                       <button
-                        onClick={() => onPracticeHandwriting(k.kanji)}
-                        className="p-1.5 text-stone-400 hover:text-rose-700 hover:bg-white rounded-lg transition-colors border border-transparent hover:border-stone-200"
-                        title={`Luyện viết chữ [${k.kanji}] trên bảng vẽ`}
+                        onClick={() => onSelectWord(k.kanji)}
+                        className="p-1.5 text-stone-400 hover:text-stone-900 hover:bg-white rounded-lg transition-colors border border-transparent hover:border-stone-200"
+                        title={`Tra cứu chi tiết chữ [${k.kanji}]`}
                       >
-                        <PenTool className="w-4 h-4" />
+                        <ArrowRight className="w-4 h-4" />
                       </button>
                     </div>
 

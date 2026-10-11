@@ -38,7 +38,6 @@ interface FavoritesViewProps {
   onUpdateNote: (id: string, note: string) => void;
   onSelectWord: (word: string) => void;
   onAddFavorite?: (item: { word: string; reading: string; hanViet: string; meaning: string; jlpt?: string }) => void;
-  onPracticeHandwriting?: (kanji: string) => void;
   theme: ThemeConfig;
   user: UserAccount;
   onToast?: (msg: string) => void;
@@ -50,7 +49,6 @@ export const FavoritesView: React.FC<FavoritesViewProps> = ({
   onUpdateNote,
   onSelectWord,
   onAddFavorite,
-  onPracticeHandwriting,
   theme,
   user,
   onToast,
@@ -182,7 +180,7 @@ export const FavoritesView: React.FC<FavoritesViewProps> = ({
             <span>Sổ Tay & Kho Kanji Năng Lực</span>
           </h2>
           <p className="text-xs text-stone-500 mt-1">
-            Gồm sổ tay cá nhân của <strong>@{user.username}</strong> và kho 2000 chữ Kanji gợi ý chuẩn JLPT (N5: 100, N4: 200, N3: 500, N2: 500, N1: 700).
+            Gồm sổ tay cá nhân của <strong>{user.isGoogleUser ? user.email : user.displayName}</strong> và kho 2000 chữ Kanji gợi ý chuẩn JLPT (N5: 100, N4: 200, N3: 500, N2: 500, N1: 700).
           </p>
         </div>
 
@@ -338,15 +336,6 @@ export const FavoritesView: React.FC<FavoritesViewProps> = ({
                       </div>
 
                       <div className="flex items-center gap-1">
-                        {onPracticeHandwriting && item.word.length === 1 && (
-                          <button
-                            onClick={() => onPracticeHandwriting(item.word)}
-                            title="Tập viết chữ này"
-                            className="p-1.5 text-stone-400 hover:text-amber-700 hover:bg-stone-100 rounded-md transition-colors"
-                          >
-                            <PenTool className="w-4 h-4" />
-                          </button>
-                        )}
                         <button
                           onClick={() => onSelectWord(item.word)}
                           title="Phân tích chi tiết thành tố Hán tự"
@@ -597,16 +586,6 @@ export const FavoritesView: React.FC<FavoritesViewProps> = ({
                     </button>
 
                     <div className="flex items-center gap-0.5">
-                      {onPracticeHandwriting && (
-                        <button
-                          onClick={() => onPracticeHandwriting(item.kanji)}
-                          title="Luyện viết nét chữ này"
-                          className="p-1.5 text-stone-400 hover:text-amber-700 hover:bg-stone-100 rounded-lg transition-colors"
-                        >
-                          <PenTool className="w-3.5 h-3.5" />
-                        </button>
-                      )}
-
                       <button
                         onClick={() => onSelectWord(item.kanji)}
                         title="Bóc tách chi tiết chữ này"
