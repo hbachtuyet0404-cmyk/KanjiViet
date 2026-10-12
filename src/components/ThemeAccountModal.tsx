@@ -7,12 +7,18 @@ import {
   LogOut,
   Mail,
   ShieldCheck,
-  UserCheck,
   Sparkles,
+  Loader2,
+  Lock,
 } from 'lucide-react';
-import { FontSizeSetting, KanjiFontStyle, PastelThemeId, ThemeSettings, UserAccount } from '../types/kanji';
+import { FontSizeSetting, KanjiFontStyle, PastelThemeId, UserAccount } from '../types/kanji';
 import { THEME_CONFIGS } from '../utils/themeManager';
-import { loginWithGoogleAccount, logoutAccount, updateAccountSettings } from '../utils/accountManager';
+import { convertFirebaseUserToAccount, logoutAccount, updateAccountSettings } from '../utils/accountManager';
+import {
+  getFriendlyAuthErrorMessage,
+  loginWithGooglePopup,
+  logoutFirebase,
+} from '../utils/firebase';
 
 interface ThemeAccountModalProps {
   isOpen: boolean;
@@ -32,23 +38,13 @@ export const ThemeAccountModal: React.FC<ThemeAccountModalProps> = ({
   initialTab = 'theme',
 }) => {
   const [modalTab, setModalTab] = useState<'theme' | 'google'>(initialTab);
-
-  // Form inputs for user's own Google account
-  const [googleEmail, setGoogleEmail] = useState('');
-  const [googleName, setGoogleName] = useState('');
-  const [googlePhoto, setGooglePhoto] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
       setModalTab(initialTab);
-      if (activeUser.isGoogleUser && activeUser.email) {
-        setGoogleEmail(activeUser.email);
-        setGoogleName(activeUser.displayName);
-        setGooglePhoto(activeUser.photoUrl || '');
-      }
     }
-  }, [isOpen, initialTab, activeUser]);
+  }, [isOpen, initialTab]);
 
   if (!isOpen) return null;
 
@@ -70,38 +66,41 @@ export const ThemeAccountModal: React.FC<ThemeAccountModalProps> = ({
     onToast('Đã cập nhật kiểu chữ Kanji!');
   };
 
-  const handleGoogleLoginSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    const email = googleEmail.trim();
-    if (!email) {
-      onToast('Vui lòng nhập địa chỉ email Google của bạn');
-      return;
-    }
-
+  /**
+   * Trigger real Google Sign-In popup with Firebase Authentication Modular SDK
+   */
+  const handleTriggerRealGoogleLogin = async () => {
+    if (isSubmitting) return;
     setIsSubmitting(true);
     try {
-      const loggedIn = loginWithGoogleAccount({
-        email,
-        displayName: googleName.trim() || email.split('@')[0],
-        photoUrl: googlePhoto.trim(),
-        role: 'Tài khoản Google cá nhân',
-      });
-
-      onUserChange(loggedIn);
-      onToast(`Đăng nhập thành công với tài khoản Google: ${loggedIn.email}!`);
+      const fbUser = await loginWithGooglePopup();
+      const userAccount = convertFirebaseUserToAccount(fbUser);
+      onUserChange(userAccount);
+      onToast(`Chào mừng ${userAccount.displayName}! Đăng nhập Google thành công.`);
       setIsSubmitting(false);
       onClose();
-    } catch {
+    } catch (err: unknown) {
       setIsSubmitting(false);
-      onToast('Có lỗi xảy ra khi đăng nhập');
+      const friendlyMsg = getFriendlyAuthErrorMessage(err);
+      onToast(friendlyMsg);
     }
   };
 
-  const handleGoogleLogout = () => {
-    const guest = logoutAccount();
-    onUserChange(guest);
-    onToast('Đã đăng xuất khỏi tài khoản Google.');
-    onClose();
+  /**
+   * Sign out from Firebase Authentication
+   */
+  const handleGoogleLogout = async () => {
+    try {
+      await logoutFirebase();
+      const guest = logoutAccount();
+      onUserChange(guest);
+      onToast('Đã đăng xuất khỏi tài khoản Google.');
+    } catch (err) {
+      console.error('Logout error', err);
+      const guest = logoutAccount();
+      onUserChange(guest);
+      onToast('Đã đăng xuất.');
+    }
   };
 
   return (
@@ -114,6 +113,7 @@ export const ThemeAccountModal: React.FC<ThemeAccountModalProps> = ({
               <img
                 src={activeUser.photoUrl}
                 alt="Google Avatar"
+                referrerPolicy="no-referrer"
                 className="w-8 h-8 rounded-full object-cover border border-stone-300"
               />
             ) : (
@@ -121,7 +121,7 @@ export const ThemeAccountModal: React.FC<ThemeAccountModalProps> = ({
             )}
             <div>
               <h3 className="font-bold text-stone-900 text-sm sm:text-base">
-                {activeUser.isGoogleUser ? 'Tài Khoản Google Của Bạn' : 'Tùy Chỉnh & Đăng Nhập'}
+                {activeUser.isGoogleUser ? 'Tài Khoản Google Của Bạn' : 'Cài Đặt & Đăng Nhập'}
               </h3>
               <p className="text-xs text-stone-500">
                 {activeUser.isGoogleUser ? (
@@ -300,17 +300,18 @@ export const ThemeAccountModal: React.FC<ThemeAccountModalProps> = ({
             </div>
           )}
 
-          {/* TAB 2: GOOGLE ACCOUNT (SIGN IN / LOGGED IN STATE) */}
+          {/* TAB 2: REAL FIREBASE GOOGLE AUTHENTICATION */}
           {modalTab === 'google' && (
             <div className="space-y-5">
               {activeUser.isGoogleUser ? (
-                /* Already logged in with Google */
+                /* Authenticated State */
                 <div className="space-y-5 animate-fade-in">
-                  <div className="p-5 bg-gradient-to-br from-emerald-50 via-teal-50 to-blue-50 border border-emerald-200/80 rounded-2xl flex items-center gap-4">
+                  <div className="p-5 bg-gradient-to-br from-emerald-50 via-teal-50 to-blue-50 border border-emerald-200/80 rounded-2xl flex items-center gap-4 shadow-2xs">
                     {activeUser.photoUrl ? (
                       <img
                         src={activeUser.photoUrl}
                         alt="Avatar"
+                        referrerPolicy="no-referrer"
                         className="w-14 h-14 rounded-full object-cover border-2 border-emerald-400 shadow-xs shrink-0"
                       />
                     ) : (
@@ -326,42 +327,45 @@ export const ThemeAccountModal: React.FC<ThemeAccountModalProps> = ({
                         </span>
                         <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded-full text-[10px] font-bold border border-emerald-200 flex items-center gap-1">
                           <Check className="w-3 h-3 stroke-[3]" />
-                          <span>Google</span>
+                          <span>Đã xác thực</span>
                         </span>
                       </div>
-                      <p className="text-xs text-stone-600 font-mono-numbers flex items-center gap-1">
-                        <Mail className="w-3.5 h-3.5 text-stone-400" />
-                        <span>{activeUser.email}</span>
+                      <p className="text-xs text-stone-600 font-mono-numbers flex items-center gap-1 truncate">
+                        <Mail className="w-3.5 h-3.5 text-stone-400 shrink-0" />
+                        <span className="truncate">{activeUser.email}</span>
                       </p>
-                      <p className="text-[11px] text-stone-500">
-                        Đang đồng bộ sổ tay Hán tự và tiến độ học tập riêng
+                      <p className="text-[11px] text-emerald-700 font-medium">
+                        Firebase Authentication · Google Provider
                       </p>
                     </div>
                   </div>
 
                   <div className="p-4 bg-stone-50 rounded-2xl border border-stone-200 text-xs text-stone-600 space-y-2">
-                    <span className="font-bold text-stone-800 block">Quyền lợi tài khoản:</span>
+                    <span className="font-bold text-stone-800 flex items-center gap-1.5">
+                      <ShieldCheck className="w-4 h-4 text-emerald-600" />
+                      <span>Bảo mật tài khoản Google:</span>
+                    </span>
                     <ul className="space-y-1 list-disc list-inside text-stone-600">
-                      <li>Tất cả từ Kanji trong sổ tay được lưu riêng theo địa chỉ email của bạn</li>
-                      <li>Chuỗi nuôi linh vật và tủ đồ được gắn cố định với tài khoản Google</li>
-                      <li>Không bị lẫn lộn dữ liệu với người khác trên cùng trình duyệt</li>
+                      <li>Tài khoản được xác thực trực tiếp bởi Google qua Firebase Auth SDK.</li>
+                      <li>Toàn bộ sổ tay, lịch sử tra cứu và chuỗi nuôi linh vật lưu riêng cho UID này.</li>
+                      <li>Tuyệt đối không lưu mật khẩu trên ứng dụng; session được duy trì an toàn.</li>
                     </ul>
                   </div>
 
                   <button
                     onClick={handleGoogleLogout}
-                    className="w-full py-3 bg-stone-100 hover:bg-rose-50 text-stone-700 hover:text-rose-700 border border-stone-300 hover:border-rose-300 rounded-2xl text-xs font-bold transition-all flex items-center justify-center gap-2"
+                    className="w-full py-3 bg-stone-100 hover:bg-rose-50 text-stone-700 hover:text-rose-700 border border-stone-300 hover:border-rose-300 rounded-2xl text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-[0.99]"
                   >
                     <LogOut className="w-4 h-4" />
                     <span>Đăng xuất khỏi tài khoản Google</span>
                   </button>
                 </div>
               ) : (
-                /* Not logged in: Clean Sign In with Google Form */
+                /* Unauthenticated: Official Google Sign-In button via Firebase */
                 <div className="space-y-5 animate-fade-in">
                   <div className="text-center space-y-2 py-2">
-                    <div className="w-12 h-12 rounded-2xl bg-white border border-stone-200 shadow-sm flex items-center justify-center mx-auto">
-                      <svg className="w-6 h-6" viewBox="0 0 24 24">
+                    <div className="w-14 h-14 rounded-2xl bg-white border border-stone-200 shadow-md flex items-center justify-center mx-auto">
+                      <svg className="w-7 h-7" viewBox="0 0 24 24">
                         <path
                           fill="#4285F4"
                           d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
@@ -381,87 +385,60 @@ export const ThemeAccountModal: React.FC<ThemeAccountModalProps> = ({
                       </svg>
                     </div>
 
-                    <h4 className="text-base font-bold text-stone-900">
-                      Đăng nhập bằng tài khoản Google của bạn
+                    <h4 className="text-lg font-bold text-stone-900">
+                      Đăng nhập bằng tài khoản Google
                     </h4>
-                    <p className="text-xs text-stone-500 max-w-sm mx-auto">
-                      Đã gỡ bỏ toàn bộ tài khoản mẫu. Nhập thông tin tài khoản Google của riêng bạn để bắt đầu lưu sổ tay và tự học Kanji.
+                    <p className="text-xs text-stone-500 max-w-sm mx-auto leading-relaxed">
+                      Sử dụng tài khoản Google để đồng bộ sổ tay Hán tự, từ yêu thích và tiến độ học tập của bạn.
                     </p>
                   </div>
 
-                  <form onSubmit={handleGoogleLoginSubmit} className="space-y-3.5">
-                    <div>
-                      <label className="block text-xs font-semibold text-stone-700 mb-1">
-                        Email Google của bạn (*):
-                      </label>
-                      <div className="relative">
-                        <Mail className="w-4 h-4 absolute left-3 top-3 text-stone-400" />
-                        <input
-                          type="email"
-                          required
-                          value={googleEmail}
-                          onChange={(e) => setGoogleEmail(e.target.value)}
-                          placeholder="ví dụ: tenban@gmail.com"
-                          className="w-full pl-9 pr-3.5 py-2.5 bg-stone-50 border border-stone-300 rounded-xl text-xs sm:text-sm text-stone-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
-                        />
-                      </div>
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-semibold text-stone-700 mb-1">
-                        Tên hiển thị (Tùy chọn):
-                      </label>
-                      <div className="relative">
-                        <UserCheck className="w-4 h-4 absolute left-3 top-3 text-stone-400" />
-                        <input
-                          type="text"
-                          value={googleName}
-                          onChange={(e) => setGoogleName(e.target.value)}
-                          placeholder="ví dụ: Bạch Tuyết / Học viên N2"
-                          className="w-full pl-9 pr-3.5 py-2.5 bg-stone-50 border border-stone-300 rounded-xl text-xs sm:text-sm text-stone-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
-                        />
-                      </div>
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-semibold text-stone-700 mb-1">
-                        Link ảnh đại diện Google (Tùy chọn):
-                      </label>
-                      <input
-                        type="url"
-                        value={googlePhoto}
-                        onChange={(e) => setGooglePhoto(e.target.value)}
-                        placeholder="https://lh3.googleusercontent.com/..."
-                        className="w-full px-3.5 py-2.5 bg-stone-50 border border-stone-300 rounded-xl text-xs text-stone-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
-                      />
-                    </div>
-
+                  {/* Main Action: Genuine Firebase Google Popup Login */}
+                  <div className="space-y-3 pt-1">
                     <button
-                      type="submit"
+                      onClick={handleTriggerRealGoogleLogin}
                       disabled={isSubmitting}
-                      className="w-full py-3 bg-white hover:bg-stone-50 text-stone-800 font-bold text-xs sm:text-sm rounded-2xl border border-stone-300 shadow-sm transition-all flex items-center justify-center gap-2 hover:shadow active:scale-[0.99] mt-2"
+                      className="w-full py-3.5 px-4 bg-white hover:bg-stone-50 active:scale-[0.99] text-stone-800 font-bold text-sm rounded-2xl border-2 border-stone-300 hover:border-blue-500 shadow-md transition-all flex items-center justify-center gap-3 cursor-pointer group"
                     >
-                      <svg className="w-4 h-4" viewBox="0 0 24 24">
-                        <path
-                          fill="#4285F4"
-                          d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
-                        />
-                        <path
-                          fill="#34A853"
-                          d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-                        />
-                        <path
-                          fill="#FBBC05"
-                          d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
-                        />
-                        <path
-                          fill="#EA4335"
-                          d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
-                        />
-                      </svg>
-                      <span>Đăng nhập với Google</span>
+                      {isSubmitting ? (
+                        <>
+                          <Loader2 className="w-5 h-5 animate-spin text-blue-600" />
+                          <span>Đang kết nối Google Authentication...</span>
+                        </>
+                      ) : (
+                        <>
+                          <svg className="w-5 h-5 shrink-0" viewBox="0 0 24 24">
+                            <path
+                              fill="#4285F4"
+                              d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+                            />
+                            <path
+                              fill="#34A853"
+                              d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+                            />
+                            <path
+                              fill="#FBBC05"
+                              d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
+                            />
+                            <path
+                              fill="#EA4335"
+                              d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
+                            />
+                          </svg>
+                          <span className="group-hover:text-blue-700 transition-colors">
+                            Tiếp tục với Google
+                          </span>
+                        </>
+                      )}
                     </button>
-                  </form>
+
+                    <div className="p-3 bg-stone-50 rounded-xl border border-stone-200/80 text-[11px] text-stone-500 flex items-start gap-2">
+                      <Lock className="w-3.5 h-3.5 text-stone-400 mt-0.5 shrink-0" />
+                      <span>
+                        Cửa sổ đăng nhập chính thức của Google sẽ bật lên để bạn chọn tài khoản Google của mình. Thông tin tài khoản được lưu tự động trên ứng dụng.
+                      </span>
+                    </div>
+                  </div>
                 </div>
               )}
             </div>

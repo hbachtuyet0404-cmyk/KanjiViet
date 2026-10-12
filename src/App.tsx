@@ -33,7 +33,12 @@ import {
   updateFavoriteNote,
   getAllCompounds,
 } from './utils/kanjiDatabase';
-import { getActiveAccount } from './utils/accountManager';
+import {
+  getActiveAccount,
+  convertFirebaseUserToAccount,
+  logoutAccount,
+} from './utils/accountManager';
+import { subscribeToAuthChanges } from './utils/firebase';
 import { THEME_CONFIGS, ThemeConfig } from './utils/themeManager';
 import { Layers, ArrowRight, Check, Palette, Globe, Sparkles, PenTool } from 'lucide-react';
 
@@ -57,6 +62,24 @@ export default function App() {
   const [isExternalSearchActive, setIsExternalSearchActive] = useState(false);
   const [sharedExternalResult, setSharedExternalResult] = useState<ExternalSearchResult | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  // Synchronize real Firebase Authentication state
+  useEffect(() => {
+    const unsubscribe = subscribeToAuthChanges((fbUser) => {
+      if (fbUser) {
+        const userAccount = convertFirebaseUserToAccount(fbUser);
+        setActiveUser(userAccount);
+      } else {
+        const current = getActiveAccount();
+        if (current.isGoogleUser) {
+          const guest = logoutAccount();
+          setActiveUser(guest);
+        }
+      }
+    });
+
+    return () => unsubscribe();
+  }, []);
 
   // Load account-scoped history and favorites whenever activeUser changes
   useEffect(() => {

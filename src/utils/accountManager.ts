@@ -1,4 +1,5 @@
 import { SavedHandwriting, ThemeSettings, UserAccount } from '../types/kanji';
+import { User as FirebaseUser } from 'firebase/auth';
 
 const STORAGE_KEYS = {
   CURRENT_USER: 'kanjiviet_current_google_user_v3',
@@ -30,6 +31,36 @@ export const GUEST_ACCOUNT: UserAccount = {
   themeSettings: DEFAULT_SETTINGS,
   createdAt: 0,
 };
+
+/**
+ * Convert real Firebase authenticated Google user into KanjiViet UserAccount.
+ * Strictly prevents any fake / manual accounts.
+ */
+export function convertFirebaseUserToAccount(fbUser: FirebaseUser): UserAccount {
+  const email = fbUser.email || '';
+  const username = email.split('@')[0] || fbUser.uid.slice(0, 8);
+  const currentTheme = getActiveAccount().themeSettings || DEFAULT_SETTINGS;
+
+  const user: UserAccount = {
+    id: `google_${fbUser.uid}`,
+    email,
+    username,
+    displayName: fbUser.displayName || username,
+    avatar: '🌐',
+    photoUrl: fbUser.photoURL || '',
+    isGoogleUser: true,
+    role: 'Tài khoản Google chính chủ',
+    themeSettings: currentTheme,
+    createdAt: fbUser.metadata.creationTime ? new Date(fbUser.metadata.creationTime).getTime() : Date.now(),
+  };
+
+  try {
+    localStorage.setItem(STORAGE_KEYS.CURRENT_USER, JSON.stringify(user));
+  } catch (err) {
+    console.error('Failed to save Google account', err);
+  }
+  return user;
+}
 
 /**
  * Returns the currently authenticated Google account, or guest if not logged in.
